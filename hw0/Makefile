@@ -1,10 +1,10 @@
 CXX := g++
 
 pi: pi.cpp
-	$(CXX) -o pi pi.cpp
+	$(CXX) -o pi.out pi.cpp
 
 run: pi
-	./pi
+	./pi.out
 
 clean:
-	rm -f pi
+	rm -f pi.out
