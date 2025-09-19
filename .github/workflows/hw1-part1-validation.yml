@@ -1,0 +1,61 @@
+name: HW1 Part1 Validation
+
+on:
+  push:
+    paths:
+      - 'HW1/part1/**'
+  pull_request:
+    paths:
+      - 'HW1/part1/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential g++
+
+    - name: Build project
+      working-directory: HW1/part1
+      run: make clean && make
+
+    - name: Test with size 3
+      working-directory: HW1/part1
+      run: |
+        output=$(./myexp -s 3)
+        echo "$output"
+        if echo "$output" | grep -q "ClampedExp Passed!!!"; then
+          echo "✅ Test with -s 3 passed"
+        else
+          echo "❌ Test with -s 3 failed"
+          exit 1
+        fi
+
+    - name: Test with size 8
+      working-directory: HW1/part1
+      run: |
+        output=$(./myexp -s 8)
+        echo "$output"
+        if echo "$output" | grep -q "ClampedExp Passed!!!" && echo "$output" | grep -q "ArraySum Passed!!!"; then
+          echo "✅ Test with -s 8 passed"
+        else
+          echo "❌ Test with -s 8 failed"
+          exit 1
+        fi
+
+    - name: Test with size 10000
+      working-directory: HW1/part1
+      run: |
+        output=$(./myexp -s 10000)
+        echo "$output"
+        if echo "$output" | grep -q "ClampedExp Passed!!!" && echo "$output" | grep -q "ArraySum Passed!!!"; then
+          echo "✅ Test with -s 10000 passed"
+        else
+          echo "❌ Test with -s 10000 failed"
+          exit 1
+        fi
