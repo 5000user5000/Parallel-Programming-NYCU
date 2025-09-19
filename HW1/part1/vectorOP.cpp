@@ -16,8 +16,10 @@ void absVector(float *values, float *output, int N)
   for (int i = 0; i < N; i += VECTOR_WIDTH)
   {
 
+    int width = (N - i >= VECTOR_WIDTH) ? VECTOR_WIDTH : (N - i); // avoid out-of-bound access
     // All ones
-    maskAll = _pp_init_ones();
+    //maskAll = _pp_init_ones();
+    maskAll = _pp_init_ones(width);
 
     // All zeros
     maskIsNegative = _pp_init_ones(0);
@@ -40,16 +42,6 @@ void absVector(float *values, float *output, int N)
     // Write results back to memory
     _pp_vstore_float(output + i, result, maskAll);
   }
-
-  // Handle remaining elements at the end when N is not a multiple of VECTOR_WIDTH
-  for(int i = (N / VECTOR_WIDTH) * VECTOR_WIDTH; i < N; i++) {
-    float x = values[i];
-    if (x < 0) {
-      output[i] = -x;
-    } else {
-      output[i] = x;
-    }
-  }
 }
 
 void clampedExpVector(float *values, int *exponents, float *output, int N)
@@ -60,11 +52,12 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
   //
   // Your solution should work for any value of
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
+  // assume exp >= 0
   
   __pp_vec_float vx;
   __pp_vec_int vy;
 
-  __pp_vec_float res = _pp_vset_float(0.f);;
+  __pp_vec_float res;
   __pp_vec_int zero = _pp_vset_int(0);
   __pp_vec_int ones = _pp_vset_int(1);
 
@@ -72,27 +65,26 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
 
   for (int i = 0; i < N; i += VECTOR_WIDTH)
   {
+
+    int width = (N - i >= VECTOR_WIDTH) ? VECTOR_WIDTH : (N - i);
     // init mask
-    maskAll = _pp_init_ones();
+    maskAll = _pp_init_ones(width);
     maskIsZero = _pp_init_ones(0);
     
     // load
     _pp_vload_float(vx, values + i, maskAll);
     _pp_vload_int(vy, exponents + i, maskAll);
+    _pp_vset_float(res, 1.f, maskAll); // default res = 1.f
     
     // check exp as 0 or not
     _pp_veq_int(maskIsZero, vy, zero, maskAll);
 
-    // if exp == 0
-    _pp_vset_float(res, 1.f, maskIsZero);
-
-    // else
+    // if exp != 0
     maskIsNotZero = _pp_mask_not(maskIsZero);
-    _pp_vmove_float(res, vx, maskIsNotZero); // res = x
   
     while(_pp_cntbits(maskIsNotZero) > 0){
       _pp_vmult_float(res, res, vx, maskIsNotZero); // res *= x
-      _pp_vsub_int(vy, vy,ones, maskIsNotZero); // exp -= 1
+      _pp_vsub_int(vy, vy, ones, maskIsNotZero); // exp -= 1
       _pp_veq_int(maskIsZero, vy, zero, maskIsNotZero);
       maskIsNotZero = _pp_mask_not(maskIsZero);
     }
@@ -108,36 +100,12 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
 
   }
 
-  // remaining part
-  for(int i = (N / VECTOR_WIDTH) * VECTOR_WIDTH; i < N; i++){
-    // from serialOP.cpp
-    float x = values[i];
-    int y = exponents[i];
-    if (y == 0)
-    {
-      output[i] = 1.f;
-    }
-    else
-    {
-      float result = x;
-      int count = y - 1;
-      while (count > 0)
-      {
-        result *= x;
-        count--;
-      }
-      if (result > 9.999999f)
-      {
-        result = 9.999999f;
-      }
-      output[i] = result;
-    }
-  }
 }
 
 // returns the sum of all elements in values
 // You can assume N is a multiple of VECTOR_WIDTH
 // You can assume VECTOR_WIDTH is a power of 2
+// So, I don't need to worry about out-of-bound access
 float arraySumVector(float *values, int N)
 {
 
@@ -145,33 +113,25 @@ float arraySumVector(float *values, int N)
   // PP STUDENTS TODO: Implement your vectorized version of arraySumSerial here
   //
 
-  __pp_vec_float sum = _pp_vset_float(0.f);
   __pp_vec_float x;
-  __pp_mask maskAll, maskIsNegative, maskIsNotNegative;
+  __pp_vec_float sum = _pp_vset_float(0.f);
+  __pp_mask maskAll;
 
   float res = 0.0;
 
 
   for (int i = 0; i < N; i += VECTOR_WIDTH)
   {
-    // All ones
     maskAll = _pp_init_ones();
-
     // load new vars
     _pp_vload_float(x, values + i, maskAll);
-
-    // accum into sum (veca can be same as vecResult,right?)
+    // accum into sum
     _pp_vadd_float(sum,sum,x,maskAll);
   }
 
   // sum of the vector
   for(int i=0; i < VECTOR_WIDTH; i++){
-    res += x.value[i]; // n.b. no 's' in value
-  }
-
-  // for remaining elements
-  for(int i = (N / VECTOR_WIDTH) * VECTOR_WIDTH; i < N; i++){
-    res += values[i];
+    res += sum.value[i]; // n.b. no 's' in value
   }
 
   return res;
