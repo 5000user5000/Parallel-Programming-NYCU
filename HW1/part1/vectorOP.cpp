@@ -44,6 +44,7 @@ void absVector(float *values, float *output, int N)
   }
 }
 
+// assume exp >= 0
 void clampedExpVector(float *values, int *exponents, float *output, int N)
 {
   //
@@ -52,7 +53,6 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
   //
   // Your solution should work for any value of
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
-  // assume exp >= 0
   
   __pp_vec_float vx;
   __pp_vec_int vy;
