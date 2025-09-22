@@ -129,16 +129,13 @@ float arraySumVector(float *values, int N)
     _pp_vadd_float(sum,sum,x,maskAll);
   }
 
-  // Tree reduction: O(log2(VECTOR_WIDTH))
-  __pp_vec_float temp = sum;
-  int remaining = VECTOR_WIDTH;
-
-  while (remaining > 1) {
-    _pp_hadd_float(temp, temp);
-    remaining /= 2;
+  // Tree reduction using hadd + interleave: O(log2(VECTOR_WIDTH))
+  for (int i = VECTOR_WIDTH; i != 1; i /= 2) {
+    _pp_hadd_float(sum, sum);
+    _pp_interleave_float(sum, sum);
   }
 
-  res = temp.value[0];
+  res = sum.value[0];
 
   return res;
 }
