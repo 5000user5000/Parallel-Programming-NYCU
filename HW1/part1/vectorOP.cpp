@@ -129,10 +129,16 @@ float arraySumVector(float *values, int N)
     _pp_vadd_float(sum,sum,x,maskAll);
   }
 
-  // sum of the vector
-  for(int i=0; i < VECTOR_WIDTH; i++){
-    res += sum.value[i]; // n.b. no 's' in value
+  // Tree reduction: O(log2(VECTOR_WIDTH))
+  __pp_vec_float temp = sum;
+  int remaining = VECTOR_WIDTH;
+
+  while (remaining > 1) {
+    _pp_hadd_float(temp, temp);
+    remaining /= 2;
   }
+
+  res = temp.value[0];
 
   return res;
 }
