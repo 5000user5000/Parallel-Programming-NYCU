@@ -53,15 +53,16 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
   // Your solution should work for any value of
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
   // assume exp >= 0
-  
+
   __pp_vec_float vx;
   __pp_vec_int vy;
+  __pp_vec_int count;
 
   __pp_vec_float res;
   __pp_vec_int zero = _pp_vset_int(0);
   __pp_vec_int ones = _pp_vset_int(1);
 
-  __pp_mask maskAll, maskIsZero, maskIsNotZero;
+  __pp_mask maskAll, maskIsZero, maskIsNotZero, maskCountGTZero;
 
   for (int i = 0; i < N; i += VECTOR_WIDTH)
   {
@@ -70,23 +71,27 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
     // init mask
     maskAll = _pp_init_ones(width);
     maskIsZero = _pp_init_ones(0);
-    
+    maskCountGTZero = _pp_init_ones(0);
+
     // load
     _pp_vload_float(vx, values + i, maskAll);
     _pp_vload_int(vy, exponents + i, maskAll);
-    _pp_vset_float(res, 1.f, maskAll); // default res = 1.f
-    
+
     // check exp as 0 or not
     _pp_veq_int(maskIsZero, vy, zero, maskAll);
+    _pp_vset_float(res, 1.f, maskIsZero); // if exp == 0, res = 1.f
 
     // if exp != 0
     maskIsNotZero = _pp_mask_not(maskIsZero);
-  
-    while(_pp_cntbits(maskIsNotZero) > 0){
-      _pp_vmult_float(res, res, vx, maskIsNotZero); // res *= x
-      _pp_vsub_int(vy, vy, ones, maskIsNotZero); // exp -= 1
-      _pp_veq_int(maskIsZero, vy, zero, maskAll);
-      maskIsNotZero = _pp_mask_not(maskIsZero);
+    _pp_vmove_float(res, vx, maskIsNotZero); // res = x for exp != 0
+    _pp_vsub_int(count, vy, ones, maskIsNotZero); // count = exp - 1
+
+    _pp_vgt_int(maskCountGTZero, count, zero, maskIsNotZero);
+
+    while(_pp_cntbits(maskCountGTZero) > 0){
+      _pp_vmult_float(res, res, vx, maskCountGTZero); // res *= x
+      _pp_vsub_int(count, count, ones, maskCountGTZero); // count -= 1
+      _pp_vgt_int(maskCountGTZero, count, zero, maskCountGTZero);
     }
 
     // clamp
@@ -94,7 +99,7 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
     __pp_mask maskIsOverLimit = _pp_init_ones(0);
     _pp_vgt_float(maskIsOverLimit, res, limit, maskAll);
     _pp_vset_float(res, 9.999999f, maskIsOverLimit);
-    
+
     // store
     _pp_vstore_float(output + i, res, maskAll);
 
