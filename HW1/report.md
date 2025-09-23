@@ -4,26 +4,34 @@
 
 Does the vector utilization increase, decrease or stay the same as VECTOR_WIDTH changes? Why?
 
-ANS:
-As VECTOR_WIDTH increases from 2→4→8→16, vector utilization tends to slightly decrease.
-The main reason is per-lane divergence in `clampedExp`: different exponents make some lanes finish early and sit idle while others keep multiplying. Wider vectors amplify this effect. Tail underfill at the last chunk also exists but is negligible for large N. Therefore, utilization typically drops modestly as the width grows.
+**ANS:**
+As `VECTOR_WIDTH` increases from 2, 4, 8 to 16, vector utilization generally **decreases**.
 
+Before explaining the reason, let’s first observe how `addLog` in `Logger.cpp` computes vector utilization: for each vector instruction, it increments `utilized_lane` for every `i ∈ [0, N)` where `mask.value[i] == 1`, and increments `total_lane` by `N` (usually equal to `VECTOR_WIDTH`). Therefore,
+
+$$
+\text{Utilization} = \frac{\text{utilized\_lane}}{\text{total\_lane}}.
+$$
+
+In other words, any masked-off lane reduces the numerator while the denominator remains fixed.
+
+Now for the cause: in `clampedExp`, different elements may have different exponents `y`. Some lanes finish quickly and get masked off, while others continue multiplying, creating **per-lane divergence**. With wider vectors, more lanes are likely to sit idle within the same iteration, so utilization drops. There is also a **tail underfill** effect in the last chunk if the data size is not a multiple of `VECTOR_WIDTH`, but this effect is negligible for large `N`.
 
 You can see the data below:
 all run by `run -- ./myexp -s 10000`
 VECTOR_WIDTH = 2 -> 4 -> 8 -> 16
-vector utilization in `clampedExp` = 86.0% -> 79.5% -> 76.2% -> 74.7%
+vector utilization in `clampedExp` = 77.9% -> 70.7% -> 67.0% -> 65.2%
 p.s. All above > 60% utilization.
 | VECTOR_WIDTH = 2,8 | VECTOR_WIDTH = 4,16 | 
 | -------- | -------- |
-| ![image](https://hackmd.io/_uploads/HkytRiCjge.png =400x200)   | ![image](https://hackmd.io/_uploads/BkNaasCiel.png =400x200)   |
-|![image](https://hackmd.io/_uploads/ry6pCiRjxe.png =400x200) | ![image](https://hackmd.io/_uploads/rJc-y2Rsxx.png =400x200)|
+| ![image](https://hackmd.io/_uploads/HkgR4s1nge.png =400x200)   | ![image](https://hackmd.io/_uploads/HkL9Voy3ex.png =400x200)   |
+|![image](https://hackmd.io/_uploads/SymXroknxx.png =400x200) | ![image](https://hackmd.io/_uploads/SyogBiJ2lg.png =400x200)|
 
 
 
 ## Bonus
 
-I implemented `arraySumVector`, assuming `N` is a multiple of `VECTOR_WIDTH` and `VECTOR_WIDTH` is even. Using `hadd + interleave`, the reduction completes in `log₂(VECTOR_WIDTH)` steps, followed by a final extraction. Verification passed, and vector utilization is ~100%, satisfying both the >80% requirement and the complexity bound, as confirmed by the four figures in Q1-1.
+I implemented `arraySumVector`, assuming `N` is a multiple of `VECTOR_WIDTH` and `VECTOR_WIDTH` is even. Using `hadd + interleave`, the reduction completes in `log₂(VECTOR_WIDTH)` steps, followed by a final extraction. Verification passed, and vector utilization is 100%, satisfying both the >80% requirement and the complexity bound, as confirmed by the four figures in Q1-1.
 
 
 
@@ -35,19 +43,15 @@ Fix the code to make sure it uses aligned moves for the best performance.
 Hint: we want to see vmovaps rather than vmovups.
 
 
-ANS:
-You can compile this code below by
-`make clean; make test1.o ASSEMBLE=1 VECTORIZE=1 RESTRICT=1 ALIGN=1 AVX2=1`
+**ANS:**
+You can modify `test1.c` like below:
 
 ```c=
 #include "test.h"
 #include <stdint.h>
 
 void test1(float *__restrict a, float *__restrict b, float *__restrict c, int N) {
-  __builtin_assume(N == 1024);          // assume N%8 ==0 （AVX2: 8 floats/vec）
-  __builtin_assume((uintptr_t)a % 32 == 0);
-  __builtin_assume((uintptr_t)b % 32 == 0);
-  __builtin_assume((uintptr_t)c % 32 == 0);
+  __builtin_assume(N == 1024);
 
   a = (float *)__builtin_assume_aligned(a, 32);  // 32-byte for AVX2
   b = (float *)__builtin_assume_aligned(b, 32);
@@ -61,22 +65,10 @@ void test1(float *__restrict a, float *__restrict b, float *__restrict c, int N)
 }
 ```
 
-And the compiled result (test1.vec.restr.align.avx2.s) will be this
+With this change the compiler now emits `vmovaps` instead of `vmovups` (as shown in the assembly below). The reason is that we explicitly told the compiler the arrays are **32-byte aligned** (the alignment requirement for AVX2 YMM registers). When alignment is guaranteed, the optimizer can safely generate the faster aligned  instructions; without that guarantee, it will conservatively use `vmovups` for safety.
+
+
 ```asm=
-	.text
-	.file	"test1.c"
-	.globl	test1                           # -- Begin function test1
-	.p2align	4, 0x90
-	.type	test1,@function
-test1:                                  # @test1
-	.cfi_startproc
-# %bb.0:
-	xorl	%eax, %eax
-	.p2align	4, 0x90
-.LBB0_1:                                # =>This Loop Header: Depth=1
-                                        #     Child Loop BB0_2 Depth 2
-	xorl	%ecx, %ecx
-	.p2align	4, 0x90
 .LBB0_2:                                #   Parent Loop BB0_1 Depth=1
                                         # =>  This Inner Loop Header: Depth=2
 	vmovaps	(%rdi,%rcx,4), %ymm0
@@ -93,22 +85,6 @@ test1:                                  # @test1
 	vmovaps	%ymm3, 96(%rdx,%rcx,4)
 	addq	$32, %rcx
 	cmpq	$1024, %rcx                     # imm = 0x400
-	jne	.LBB0_2
-# %bb.3:                                #   in Loop: Header=BB0_1 Depth=1
-	incl	%eax
-	cmpl	$20000000, %eax                 # imm = 0x1312D00
-	jne	.LBB0_1
-# %bb.4:
-	vzeroupper
-	retq
-.Lfunc_end0:
-	.size	test1, .Lfunc_end0-test1
-	.cfi_endproc
-                                        # -- End function
-	.ident	"Ubuntu clang version 18.1.3 (1ubuntu1)"
-	.section	".note.GNU-stack","",@progbits
-	.addrsig
-
 ```
 
 
@@ -127,13 +103,13 @@ ANS:
 
 ### Experimental Results
 
-On the PP machines, I ran three configurations and took the median elapsed times:
+On the PP machines, I ran three configurations on fixed `test1.c` and took the median elapsed times:
 
 |  Case  | Configuration                  | Time (s)  | Relative Speedup                               |
 |:------:| ------------------------------ | --------- | ---------------------------------------------- |
 | Case 1 | baseline (no vectorization)    | **6.945** | 1×                                             |
-| Case 2 | vectorization (SSE, 128-bit)   | **1.735** | \~**4×** (6.945 / 1.735)                       |
-| Case 3 | vectorization + AVX2 (256-bit) | **0.874** | \~**8×** (6.945 / 0.874), \~**2×** over Case 2 |
+| Case 2 | vectorization    | **1.735** | \~**4×** (6.945 / 1.735)                       |
+| Case 3 | vectorization + AVX2  | **0.874** | \~**8×** (6.945 / 0.874), \~**2×** over Case 2 |
 
 
 ### Speedup Analysis
@@ -145,8 +121,8 @@ On the PP machines, I ran three configurations and took the median elapsed times
 
 ### Conclusion and Inference
 
-* From the \~4× speedup in Case 2, we infer that the **default vector registers** are **128-bit SSE registers**, processing 4 floats (4×32 bits) at a time.
-* From the additional 2× gain in Case 3, we infer that the **AVX2 vector registers** are **256-bit registers**, processing 8 floats (8×32 bits) at a time.
+* From the \~4× speedup in Case 2, I infer that the **default vector registers** are **128-bit SSE registers**, processing 4 floats (4×32 bits) at a time.
+* From the additional 2× gain in Case 3, I infer that the **AVX2 vector registers** are **256-bit registers**, processing 8 floats (8×32 bits) at a time.
 * The measured performance aligns well with the theoretical throughput of these vector widths.
 
 ## Q2-3
@@ -154,8 +130,74 @@ On the PP machines, I ran three configurations and took the median elapsed times
 Provide a theory for why the compiler is generating dramatically different assemblies.
 
 ANS:
-The original version first stores a value and then conditionally overwrites it. 
-This looks like two separate stores rather than a simple max, introducing a **store dependency**, so the compiler conservatively **avoids vectorization**.
+The original version first stores `a[j]` into `c[j]` and may overwrite it later. This introduces an **extra store side effect**, so the compiler cannot safely fold it into a single max operation and thus avoids vectorization.
 
-The rewritten version expresses it as a **conditional assignment**, which the compiler can recognize as a **max pattern**. 
-It gets lowered to the SIMD `maxps` operation, so the compiler safely vectorizes it using `movaps` (aligned load) and `maxps` (packed float max).
+The rewritten version expresses the logic as a **conditional assignment**, which matches the compiler’s **max idiom**. The optimizer recognizes it can be lowered to a branchless SIMD operation using `maxps`, so the loop is vectorized with `movaps` (aligned load) + `maxps` (packed float max).
+
+
+Original version of `test2.c` :
+```asm=
+.LBB0_7:                                #   in Loop: Header=BB0_1 Depth=1
+        addl    $1, %r8d
+        cmpl    $20000000, %r8d                 # imm = 0x1312D00
+        je      .LBB0_8
+.LBB0_1:                                # =>This Loop Header: Depth=1
+                                        #     Child Loop BB0_2 Depth 2
+        xorl    %ecx, %ecx
+        jmp     .LBB0_2
+        .p2align        4, 0x90
+.LBB0_6:                                #   in Loop: Header=BB0_2 Depth=2
+        addq    $2, %rcx
+        cmpq    $1024, %rcx                     # imm = 0x400
+        je      .LBB0_7
+.LBB0_2:                                #   Parent Loop BB0_1 Depth=1
+                                        # =>  This Inner Loop Header: Depth=2
+        movl    (%rdi,%rcx,4), %eax
+        movl    %eax, (%rdx,%rcx,4)
+        movss   (%rsi,%rcx,4), %xmm0            # xmm0 = mem[0],zero,zero,zero
+        movd    %eax, %xmm1
+        ucomiss %xmm1, %xmm0
+        jbe     .LBB0_4
+# %bb.3:                                #   in Loop: Header=BB0_2 Depth=2
+        movss   %xmm0, (%rdx,%rcx,4)
+.LBB0_4:                                #   in Loop: Header=BB0_2 Depth=2
+        movl    4(%rdi,%rcx,4), %eax
+        movl    %eax, 4(%rdx,%rcx,4)
+        movss   4(%rsi,%rcx,4), %xmm0           # xmm0 = mem[0],zero,zero,zero
+        movd    %eax, %xmm1
+        ucomiss %xmm1, %xmm0
+        jbe     .LBB0_6
+# %bb.5:                                #   in Loop: Header=BB0_2 Depth=2
+        movss   %xmm0, 4(%rdx,%rcx,4)
+        jmp     .LBB0_6
+.LBB0_8:
+        retq
+```
+
+
+After patching:
+```asm=
+.LBB0_2:                                #   Parent Loop BB0_1 Depth=1
+                                        # =>  This Inner Loop Header: Depth=2
+        movaps  (%rsi,%rcx,4), %xmm0
+        movaps  16(%rsi,%rcx,4), %xmm1
+        maxps   (%rdi,%rcx,4), %xmm0
+        maxps   16(%rdi,%rcx,4), %xmm1
+        movups  %xmm0, (%rdx,%rcx,4)
+        movups  %xmm1, 16(%rdx,%rcx,4)
+        movaps  32(%rsi,%rcx,4), %xmm0
+        movaps  48(%rsi,%rcx,4), %xmm1
+        maxps   32(%rdi,%rcx,4), %xmm0
+        maxps   48(%rdi,%rcx,4), %xmm1
+        movups  %xmm0, 32(%rdx,%rcx,4)
+        movups  %xmm1, 48(%rdx,%rcx,4)
+        addq    $16, %rcx
+        cmpq    $1024, %rcx                     # imm = 0x400
+        jne     .LBB0_2
+# %bb.3:                                #   in Loop: Header=BB0_1 Depth=1
+        addl    $1, %eax
+        cmpl    $20000000, %eax                 # imm = 0x1312D00
+        jne     .LBB0_1
+# %bb.4:
+        retq
+```
