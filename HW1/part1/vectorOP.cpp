@@ -85,7 +85,7 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
     while(_pp_cntbits(maskIsNotZero) > 0){
       _pp_vmult_float(res, res, vx, maskIsNotZero); // res *= x
       _pp_vsub_int(vy, vy, ones, maskIsNotZero); // exp -= 1
-      _pp_veq_int(maskIsZero, vy, zero, maskIsNotZero);
+      _pp_veq_int(maskIsZero, vy, zero, maskAll);
       maskIsNotZero = _pp_mask_not(maskIsZero);
     }
 
