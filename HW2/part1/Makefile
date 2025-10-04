@@ -18,8 +18,8 @@ pg: $(SRC)
 	gprof ./$(TARGET) gmon.out -b > profiling_result
 
 perf: $(SRC)
-	$(CXX) -g -o $(TARGET) $<
-	perf record ./$(TARGET)
+	$(CXX) $(CXXFLAGS)  -g -fno-omit-frame-pointer -o $(TARGET) $<
+	perf record -g --call-graph dwarf ./$(TARGET) 4 100000000
 	perf report
 
 clean:
