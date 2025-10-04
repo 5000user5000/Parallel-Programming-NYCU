@@ -1,6 +1,6 @@
 # HW0: Monte Carlo Estimation of π
 
-This project is the **Homework 0 (warming up)** for NYCU Parallel Programming.  
+This project is the **Homework 2** for NYCU Parallel Programming.  
 The task is to implement a simple **Monte Carlo simulation** to estimate the value of π.
 
 ## How to Build & Run
