@@ -1,5 +1,5 @@
 CXX := g++
-CXXFLAGS := -O2 -Wall
+CXXFLAGS := -O2 -Wall -lpthread
 
 TARGET := pi.out
 SRC := pi.cpp
@@ -10,7 +10,7 @@ $(TARGET): $(SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 run: $(TARGET)
-	./$(TARGET)
+	./$(TARGET) 4 1000000000
 
 pg: $(SRC)
 	$(CXX) -pg -o $(TARGET) $<
