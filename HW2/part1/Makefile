@@ -1,5 +1,5 @@
 CXX := g++
-CXXFLAGS := -O2 -Wall -lpthread
+CXXFLAGS := -O3 -march=native -ffast-math -funroll-loops -flto -Wall -pthread
 
 TARGET := pi.out
 SRC := pi.cpp
