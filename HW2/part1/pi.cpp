@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <string>
 #include <pthread.h>
+#include <stdint.h>
 using namespace std;
 
 // #define PI M_PI
@@ -15,18 +16,37 @@ typedef struct{
     long long int in_circle;
 } Arg; // 傳給 thread 的參數
 
+// 快速的 xorshift128+ PRNG
+struct xorshift128p_state {
+    uint64_t s[2];
+};
 
+static inline uint64_t xorshift128p(struct xorshift128p_state *state) {
+    uint64_t s1 = state->s[0];
+    const uint64_t s0 = state->s[1];
+    state->s[0] = s0;
+    s1 ^= s1 << 23;
+    state->s[1] = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5);
+    return state->s[1] + s0;
+}
+
+static inline double random_double(struct xorshift128p_state *state) {
+    // 產生 [0, 1) 的隨機數
+    return (xorshift128p(state) >> 11) * (1.0 / 9007199254740992.0);
+}
 
 void* count_pi(void* args){
     Arg* arg = (Arg*) args;
     long long int in_circle = 0;
 
-    // 每個 thread 使用獨立的 seed
-    unsigned int seed = arg->thread_id;
+    // 初始化 xorshift128+ state，每個 thread 使用不同的 seed
+    struct xorshift128p_state state;
+    state.s[0] = arg->thread_id + 1;
+    state.s[1] = (arg->thread_id + 1) * 0x123456789ABCDEF;
 
     for(long long int toss = arg->start; toss < arg->end; toss++){
-        double x = 2.0 * rand_r(&seed) / (RAND_MAX + 1.0) - 1.0;
-        double y = 2.0 * rand_r(&seed) / (RAND_MAX + 1.0) - 1.0;
+        double x = 2.0 * random_double(&state) - 1.0;
+        double y = 2.0 * random_double(&state) - 1.0;
         if( (x*x + y*y) <= 1) in_circle++;
     }
     arg->in_circle = in_circle;
