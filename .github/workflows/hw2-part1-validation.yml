@@ -1,0 +1,55 @@
+name: HW2 Part1 Validation
+
+on:
+  push:
+    paths:
+      - 'HW2/part1/**'
+  pull_request:
+    paths:
+      - 'HW2/part1/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential g++
+
+    - name: Build project
+      working-directory: HW2/part1
+      run: make clean && make
+
+    - name: Test with 1 thread
+      working-directory: HW2/part1
+      run: |
+        output=$(time ./pi.out 1 1000000000 2>&1)
+        echo "$output"
+        pi_value=$(echo "$output" | grep "Estimated PI" | awk '{print $4}')
+        echo "PI value: $pi_value"
+        # 檢查 PI 前三位小數是否為 3.141
+        if echo "$pi_value" | grep -qE "^3\.141[0-9]"; then
+          echo "✅ Test with 1 thread passed (PI ≈ $pi_value)"
+        else
+          echo "❌ Test with 1 thread failed (PI = $pi_value, expected ~3.141x)"
+          exit 1
+        fi
+
+    - name: Test with 2 threads
+      working-directory: HW2/part1
+      run: |
+        output=$(time ./pi.out 2 1000000000 2>&1)
+        echo "$output"
+        pi_value=$(echo "$output" | grep "Estimated PI" | awk '{print $4}')
+        echo "PI value: $pi_value"
+        # 檢查 PI 前三位小數是否為 3.141
+        if echo "$pi_value" | grep -qE "^3\.141[0-9]"; then
+          echo "✅ Test with 2 threads passed (PI ≈ $pi_value)"
+        else
+          echo "❌ Test with 2 threads failed (PI = $pi_value, expected ~3.141x)"
+          exit 1
+        fi
