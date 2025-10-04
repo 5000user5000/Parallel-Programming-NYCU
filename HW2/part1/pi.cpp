@@ -30,11 +30,6 @@ static inline uint64_t xorshift128p(struct xorshift128p_state *state) {
     return state->s[1] + s0;
 }
 
-static inline double random_double(struct xorshift128p_state *state) {
-    // 產生 [0, 1) 的隨機數
-    return (xorshift128p(state) >> 11) * (1.0 / 9007199254740992.0);
-}
-
 void* count_pi(void* args){
     Arg* arg = (Arg*) args;
     long long int in_circle = 0;
@@ -44,10 +39,20 @@ void* count_pi(void* args){
     state.s[0] = arg->thread_id + 1;
     state.s[1] = (arg->thread_id + 1) * 0x123456789ABCDEF;
 
+    // 預先計算常數
+    const double scale = 2.0 / 4294967296.0; // 2.0 / 2^32
+
     for(long long int toss = arg->start; toss < arg->end; toss++){
-        double x = 2.0 * random_double(&state) - 1.0;
-        double y = 2.0 * random_double(&state) - 1.0;
-        if( (x*x + y*y) <= 1) in_circle++;
+        // 一個 64-bit 隨機數拆成兩個 32-bit 給 x 和 y
+        uint64_t r = xorshift128p(&state);
+        uint32_t rx = (uint32_t)(r & 0xFFFFFFFF);
+        uint32_t ry = (uint32_t)(r >> 32);
+
+        double x = rx * scale - 1.0;
+        double y = ry * scale - 1.0;
+
+        // Branchless
+        in_circle += (x*x + y*y <= 1.0);
     }
     arg->in_circle = in_circle;
     pthread_exit((void *)0);

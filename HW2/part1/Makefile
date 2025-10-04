@@ -1,5 +1,5 @@
 CXX := g++
-CXXFLAGS := -O3 -march=native -ffast-math -funroll-loops -flto -Wall -pthread
+CXXFLAGS := -O3 -march=native -mtune=native -ffast-math -funroll-loops -flto -DNDEBUG -fno-stack-protector -Wall -pthread
 
 TARGET := pi.out
 SRC := pi.cpp
