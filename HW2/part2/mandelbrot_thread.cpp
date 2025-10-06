@@ -32,16 +32,25 @@ extern void mandelbrot_serial(float x0,
 // Thread entrypoint.
 void worker_thread_start(WorkerArgs *const args)
 {
+    // 計算每個執行緒負責的行數
+    int rows_per_thread = args->height / args->numThreads;
+    int start_row = args->threadId * rows_per_thread;
+    int num_rows = rows_per_thread;
 
-    // TODO FOR PP STUDENTS: Implement the body of the worker
-    // thread here. Each thread could make a call to mandelbrot_serial()
-    // to compute a part of the output image. For example, in a
-    // program that uses two threads, thread 0 could compute the top
-    // half of the image and thread 1 could compute the bottom half.
-    // Of course, you can copy mandelbrot_serial() to this file and
-    // modify it to pursue a better performance.
+    // 最後一個執行緒處理剩餘的行
+    if (args->threadId == args->numThreads - 1) {
+        num_rows = args->height - start_row;
+    }
 
-    printf("Hello world from thread %d\n", args->threadId);
+    // 呼叫 mandelbrot_serial 計算這個執行緒負責的部分
+    mandelbrot_serial(
+        args->x0, args->y0,
+        args->x1, args->y1,
+        args->width, args->height,
+        start_row, num_rows,
+        args->maxIterations,
+        args->output
+    );
 }
 
 //
