@@ -5,7 +5,12 @@
 #include <string>
 #include <pthread.h>
 #include <stdint.h>
+#include <immintrin.h>
+#define __AVX2_AVAILABLE__
+#include "include/SIMDInstructionSet.h"
+#include "include/Xoshiro256Plus.h"
 using namespace std;
+using namespace SEFUtility::RNG;
 
 // #define PI M_PI
 
@@ -16,45 +21,68 @@ typedef struct{
     long long int in_circle;
 } Arg; // 傳給 thread 的參數
 
-// 快速的 xorshift128+ PRNG
-struct xorshift128p_state {
-    uint64_t s[2];
-};
-
-static inline uint64_t xorshift128p(struct xorshift128p_state *state) {
-    uint64_t s1 = state->s[0];
-    const uint64_t s0 = state->s[1];
-    state->s[0] = s0;
-    s1 ^= s1 << 23;
-    state->s[1] = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5);
-    return state->s[1] + s0;
-}
-
 void* count_pi(void* args){
     Arg* arg = (Arg*) args;
-    long long int in_circle = 0;
 
-    // 初始化 xorshift128+ state，每個 thread 使用不同的 seed
-    struct xorshift128p_state state;
-    state.s[0] = arg->thread_id + 1;
-    state.s[1] = (arg->thread_id + 1) * 0x123456789ABCDEF;
+    // 使用 AVX2 版本的 Xoshiro256Plus，每個 thread 不同 seed
+    Xoshiro256Plus<SIMDInstructionSet::AVX2> rng((arg->thread_id + 1) * 0x9e3779b97f4a7c15ULL);
 
-    // 預先計算常數
-    const double scale = 2.0 / 4294967296.0; // 2.0 / 2^32
+    long long int total = arg->end - arg->start;
+    long long int local_sum = 0;
 
-    for(long long int toss = arg->start; toss < arg->end; toss++){
-        // 一個 64-bit 隨機數拆成兩個 32-bit 給 x 和 y
-        uint64_t r = xorshift128p(&state);
-        uint32_t rx = (uint32_t)(r & 0xFFFFFFFF);
-        uint32_t ry = (uint32_t)(r >> 32);
+    // AVX2 常數
+    const __m256 rand_scale = _mm256_set1_ps(4.6566129e-10f);  // 1.0f / 2^31
+    const __m256 one = _mm256_set1_ps(1.0f);
 
-        double x = rx * scale - 1.0;
-        double y = ry * scale - 1.0;
+    // 主循環：每次處理 16 個點（unroll 2x）
+    long long int main_loop = total / 16;
 
-        // Branchless
-        in_circle += (x*x + y*y <= 1.0);
+    for(long long int i = 0; i < main_loop; i++){
+        // 第一批 8 個點
+        __m256i rand_x1 = rng.next4().operator __m256i();
+        __m256i rand_y1 = rng.next4().operator __m256i();
+
+        __m256 x1 = _mm256_cvtepi32_ps(rand_x1);
+        x1 = _mm256_mul_ps(x1, rand_scale);
+
+        __m256 y1 = _mm256_cvtepi32_ps(rand_y1);
+        y1 = _mm256_mul_ps(y1, rand_scale);
+
+        x1 = _mm256_mul_ps(x1, x1);
+        y1 = _mm256_mul_ps(y1, y1);
+        __m256 sum1 = _mm256_add_ps(x1, y1);
+        __m256 cmp1 = _mm256_cmp_ps(sum1, one, _CMP_LE_OQ);
+
+        // 第二批 8 個點
+        __m256i rand_x2 = rng.next4().operator __m256i();
+        __m256i rand_y2 = rng.next4().operator __m256i();
+
+        __m256 x2 = _mm256_cvtepi32_ps(rand_x2);
+        x2 = _mm256_mul_ps(x2, rand_scale);
+
+        __m256 y2 = _mm256_cvtepi32_ps(rand_y2);
+        y2 = _mm256_mul_ps(y2, rand_scale);
+
+        x2 = _mm256_mul_ps(x2, x2);
+        y2 = _mm256_mul_ps(y2, y2);
+        __m256 sum2 = _mm256_add_ps(x2, y2);
+        __m256 cmp2 = _mm256_cmp_ps(sum2, one, _CMP_LE_OQ);
+
+        // 累加結果
+        local_sum += __builtin_popcount(_mm256_movemask_ps(cmp1));
+        local_sum += __builtin_popcount(_mm256_movemask_ps(cmp2));
     }
-    arg->in_circle = in_circle;
+
+    // 處理剩餘的點
+    long long int remain = total % 16;
+    for(long long int i = 0; i < remain; i++){
+        uint64_t r = rng.next();
+        float x = (int32_t)(r) * 4.6566129e-10f;
+        float y = (int32_t)(r >> 32) * 4.6566129e-10f;
+        local_sum += (x*x + y*y <= 1.0f);
+    }
+
+    arg->in_circle = local_sum;
     pthread_exit((void *)0);
 }
 
