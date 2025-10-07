@@ -37,25 +37,19 @@ void worker_thread_start(WorkerArgs *const args)
 {
     double start_time = CycleTimer::current_seconds();
 
-    // 計算每個執行緒負責的行數
-    int rows_per_thread = args->height / args->numThreads;
-    int start_row = args->threadId * rows_per_thread;
-    int num_rows = rows_per_thread;
-
-    // 最後一個執行緒處理剩餘的行
-    if (args->threadId == args->numThreads - 1) {
-        num_rows = args->height - start_row;
+    // 使用交錯分配：thread i 處理第 i, i+numThreads, i+2*numThreads... 行
+    for (int row = args->threadId; row < args->height; row += args->numThreads)
+    {
+        // 每個 thread 處理一行
+        mandelbrot_serial(
+            args->x0, args->y0,
+            args->x1, args->y1,
+            args->width, args->height,
+            row, 1,  // start_row = row, num_rows = 1
+            args->maxIterations,
+            args->output
+        );
     }
-
-    // 呼叫 mandelbrot_serial 計算這個執行緒負責的部分
-    mandelbrot_serial(
-        args->x0, args->y0,
-        args->x1, args->y1,
-        args->width, args->height,
-        start_row, num_rows,
-        args->maxIterations,
-        args->output
-    );
 
     double end_time = CycleTimer::current_seconds();
     args->executionTime = end_time - start_time;
