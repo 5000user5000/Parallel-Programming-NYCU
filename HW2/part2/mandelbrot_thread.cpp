@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <thread>
 
+#include "cycle_timer.h"
+
 struct WorkerArgs
 {
     float x0, x1;
@@ -13,6 +15,7 @@ struct WorkerArgs
     int *output;
     int threadId;
     int numThreads;
+    double executionTime;
 };
 
 extern void mandelbrot_serial(float x0,
@@ -32,16 +35,24 @@ extern void mandelbrot_serial(float x0,
 // Thread entrypoint.
 void worker_thread_start(WorkerArgs *const args)
 {
+    double start_time = CycleTimer::current_seconds();
 
-    // TODO FOR PP STUDENTS: Implement the body of the worker
-    // thread here. Each thread could make a call to mandelbrot_serial()
-    // to compute a part of the output image. For example, in a
-    // program that uses two threads, thread 0 could compute the top
-    // half of the image and thread 1 could compute the bottom half.
-    // Of course, you can copy mandelbrot_serial() to this file and
-    // modify it to pursue a better performance.
+    // 使用交錯分配：thread i 處理第 i, i+numThreads, i+2*numThreads... 行
+    for (int row = args->threadId; row < args->height; row += args->numThreads)
+    {
+        // 每個 thread 處理一行
+        mandelbrot_serial(
+            args->x0, args->y0,
+            args->x1, args->y1,
+            args->width, args->height,
+            row, 1,  // start_row = row, num_rows = 1
+            args->maxIterations,
+            args->output
+        );
+    }
 
-    printf("Hello world from thread %d\n", args->threadId);
+    double end_time = CycleTimer::current_seconds();
+    args->executionTime = end_time - start_time;
 }
 
 //
@@ -103,5 +114,12 @@ void mandelbrot_thread(int num_threads,
     for (int i = 1; i < num_threads; i++)
     {
         workers[i].join();
+    }
+
+    // Print execution time for each thread
+    printf("\nThread execution times:\n");
+    for (int i = 0; i < num_threads; i++)
+    {
+        printf("  Thread %d: [%.3f] ms\n", i, args[i].executionTime * 1000);
     }
 }

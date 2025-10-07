@@ -1,0 +1,73 @@
+name: HW2 Part2 Validation
+
+on:
+  push:
+    paths:
+      - 'HW2/part2/**'
+  pull_request:
+    paths:
+      - 'HW2/part2/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential g++
+
+    - name: Build project
+      working-directory: HW2/part2
+      run: make clean && make
+
+    - name: Verify output correctness
+      working-directory: HW2/part2
+      run: |
+        # 檢查是否有 "Error : Output from threads does not match serial output"
+        output=$(./mandelbrot  2>&1)
+        if echo "$output" | grep -q "Error : Output from threads does not match serial output"; then
+          echo "❌ Thread output does not match serial output"
+          exit 1
+        else
+          echo "✅ Thread output matches serial output"
+        fi
+
+    - name: Test with 2 threads (view 1)
+      working-directory: HW2/part2
+      run: |
+        output=$(./mandelbrot -t 2 2>&1)
+        echo "$output"
+        if echo "$output" | grep -q "speedup from 2 threads"; then
+          echo "✅ Test with 2 threads (view 1) passed"
+        else
+          echo "❌ Test with 2 threads (view 1) failed"
+          exit 1
+        fi
+
+    - name: Test with 4 threads (view 1)
+      working-directory: HW2/part2
+      run: |
+        output=$(./mandelbrot -t 4 2>&1)
+        echo "$output"
+        if echo "$output" | grep -q "speedup from 4 threads"; then
+          echo "✅ Test with 4 threads (view 1) passed"
+        else
+          echo "❌ Test with 4 threads (view 1) failed"
+          exit 1
+        fi
+
+    - name: Test with 4 threads (view 2)
+      working-directory: HW2/part2
+      run: |
+        output=$(./mandelbrot -t 4 -v 2 2>&1)
+        echo "$output"
+        if echo "$output" | grep -q "speedup from 4 threads"; then
+          echo "✅ Test with 4 threads (view 2) passed"
+        else
+          echo "❌ Test with 4 threads (view 2) failed"
+          exit 1
+        fi
