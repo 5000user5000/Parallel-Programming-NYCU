@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <thread>
 
+#include "cycle_timer.h"
+
 struct WorkerArgs
 {
     float x0, x1;
@@ -13,6 +15,7 @@ struct WorkerArgs
     int *output;
     int threadId;
     int numThreads;
+    double executionTime;
 };
 
 extern void mandelbrot_serial(float x0,
@@ -32,6 +35,8 @@ extern void mandelbrot_serial(float x0,
 // Thread entrypoint.
 void worker_thread_start(WorkerArgs *const args)
 {
+    double start_time = CycleTimer::current_seconds();
+
     // 計算每個執行緒負責的行數
     int rows_per_thread = args->height / args->numThreads;
     int start_row = args->threadId * rows_per_thread;
@@ -51,6 +56,9 @@ void worker_thread_start(WorkerArgs *const args)
         args->maxIterations,
         args->output
     );
+
+    double end_time = CycleTimer::current_seconds();
+    args->executionTime = end_time - start_time;
 }
 
 //
@@ -112,5 +120,12 @@ void mandelbrot_thread(int num_threads,
     for (int i = 1; i < num_threads; i++)
     {
         workers[i].join();
+    }
+
+    // Print execution time for each thread
+    printf("\nThread execution times:\n");
+    for (int i = 0; i < num_threads; i++)
+    {
+        printf("  Thread %d: [%.3f] ms\n", i, args[i].executionTime * 1000);
     }
 }
