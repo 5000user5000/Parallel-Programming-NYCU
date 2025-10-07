@@ -1,5 +1,5 @@
 CXX := g++
-CXXFLAGS := -O2 -Wall -lpthread
+CXXFLAGS := -O3 -std=c++17 -Wall -pthread -mavx2 -march=x86-64-v3 -mtune=native -ffast-math -funroll-loops -flto -DNDEBUG -fno-stack-protector -fno-exceptions 
 
 TARGET := pi.out
 SRC := pi.cpp
@@ -18,8 +18,8 @@ pg: $(SRC)
 	gprof ./$(TARGET) gmon.out -b > profiling_result
 
 perf: $(SRC)
-	$(CXX) -g -o $(TARGET) $<
-	perf record ./$(TARGET)
+	$(CXX) $(CXXFLAGS)  -g -fno-omit-frame-pointer -o $(TARGET) $<
+	perf record -g --call-graph dwarf ./$(TARGET) 4 100000000
 	perf report
 
 clean:
