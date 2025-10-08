@@ -29,7 +29,7 @@ jobs:
       run: |
         output=$(time ./pi.out 1 1000000000 2>&1)
         echo "$output"
-        pi_value=$(echo "$output" | grep "Estimated PI" | awk '{print $4}')
+        pi_value=$(echo "$output" | grep -E "^3\." | head -1)
         echo "PI value: $pi_value"
         # 檢查 PI 前三位小數是否為 3.141
         if echo "$pi_value" | grep -qE "^3\.141[0-9]"; then
@@ -44,7 +44,7 @@ jobs:
       run: |
         output=$(time ./pi.out 2 1000000000 2>&1)
         echo "$output"
-        pi_value=$(echo "$output" | grep "Estimated PI" | awk '{print $4}')
+        pi_value=$(echo "$output" | grep -E "^3\." | head -1)
         echo "PI value: $pi_value"
         # 檢查 PI 前三位小數是否為 3.141
         if echo "$pi_value" | grep -qE "^3\.141[0-9]"; then
