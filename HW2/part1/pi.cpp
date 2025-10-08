@@ -130,7 +130,7 @@ int main(int argc,char *argv[]){
     // cout<<"number_of_tosses = "<<number_of_tosses<<endl;
 
     double pi_estimate = 4.0 * number_in_circle / number_of_tosses;
-    cout<<"Estimated PI = "<<pi_estimate<<endl;
+    cout<<pi_estimate<<endl;
 
     return 0;
 }
