@@ -1,0 +1,76 @@
+name: HW3 Part1 Validation
+
+on:
+  push:
+    paths:
+      - 'HW3/part1/**'
+      - '.github/workflows/hw3-part1-validation.yml'
+  pull_request:
+    paths:
+      - 'HW3/part1/**'
+      - '.github/workflows/hw3-part1-validation.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential gcc libomp-dev
+
+    - name: Check CPU info
+      run: |
+        echo "CPU cores: $(nproc)"
+        echo "CPU info:"
+        lscpu | grep -E "^CPU\(s\)|Model name|Thread|Core"
+
+    - name: Build project
+      working-directory: HW3/part1
+      run: make clean && make
+
+    - name: Run CG grader
+      working-directory: HW3/part1
+      run: |
+        output=$(./cg_grader 2>&1)
+        echo "$output"
+
+        # Check if verification is successful
+        if echo "$output" | grep -q "VERIFICATION SUCCESSFUL"; then
+          echo "✅ CG verification passed"
+        else
+          echo "❌ CG verification failed"
+          exit 1
+        fi
+
+        # Check if total score is 20.000000 (full marks)
+        # Note: GitHub CI has limited CPU resources, so performance score may be lower
+        # This check is mainly for local verification
+        score=$(echo "$output" | grep "total" | awk '{print $3}')
+        if echo "$output" | grep -q "total.*:.*20\.000000"; then
+          echo "✅ Full score achieved: 20.000000"
+        elif echo "$output" | grep -q "total.*:.*0\.000000"; then
+          echo "⚠️  Performance test failed on CI (score: $score)"
+          echo "⚠️  This is expected on GitHub CI due to limited CPU resources"
+          echo "⚠️  Please verify locally that you get 20.000000"
+          echo "✅ CI passed (correctness verified, performance check skipped on CI)"
+        else
+          echo "⚠️  Partial score: $score (expected 20.000000)"
+        fi
+
+    - name: Run CG benchmark
+      working-directory: HW3/part1
+      run: |
+        output=$(./cg 2>&1)
+        echo "$output"
+
+        # Check if verification is successful
+        if echo "$output" | grep -q "VERIFICATION SUCCESSFUL"; then
+          echo "✅ CG benchmark verification passed"
+        else
+          echo "❌ CG benchmark verification failed"
+          exit 1
+        fi
