@@ -4,9 +4,11 @@ on:
   push:
     paths:
       - 'HW3/part1/**'
+      - '.github/workflows/hw3-part1-validation.yml'
   pull_request:
     paths:
       - 'HW3/part1/**'
+      - '.github/workflows/hw3-part1-validation.yml'
 
 jobs:
   test:
