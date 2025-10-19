@@ -54,4 +54,51 @@ void page_rank(Graph g, double *solution, double damping, double convergence)
        }
 
      */
+     bool converged = false;
+     while(!converged){
+        double *score_new = new double[nnodes];
+
+        // 計算新分數
+        // sum over all incoming edges
+        for(int vi=0;vi<nnodes;vi++){
+          score_new[vi] = 0.0;  // 初始化
+          const Vertex* start = incoming_begin(g, vi);
+          const Vertex* end = incoming_end(g, vi);
+          for(const Vertex* neighbor = start; neighbor != end; neighbor++){
+            int vj = *neighbor;  // 解引用获取邻居节点编号
+            score_new[vi] += solution[vj] / outgoing_size(g, vj);
+          }
+        }
+
+        for(int vi=0;vi<nnodes;vi++){
+            score_new[vi] = (damping * score_new[vi]) + (1.0 - damping) / nnodes;
+        }
+
+        // 處理 dead end (no outgoing)
+        double bias = 0.0;
+        for(int vi=0;vi<nnodes;vi++){
+          if(outgoing_size(g,vi)==0){
+            bias += damping*solution[vi] / nnodes;
+          }
+        }
+        // 將 bias 累加上去
+        for(int vi=0;vi<nnodes;vi++){
+          score_new[vi] += bias;
+        }
+
+        // 計算 global_diff
+        double global_diff = 0.0;
+        for(int vi=0;vi<nnodes;vi++){
+          global_diff += fabs(score_new[vi]-solution[vi]);
+        }
+
+        converged = (global_diff < convergence);
+
+        // update score
+        for(int i=0;i<nnodes;i++){
+          solution[i] = score_new[i];
+        }
+
+        delete[] score_new;
+     }
 }
