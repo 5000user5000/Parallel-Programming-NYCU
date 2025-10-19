@@ -54,57 +54,61 @@ void page_rank(Graph g, double *solution, double damping, double convergence)
        }
 
      */
+     // 配置兩個陣列用於 double buffering
+     double *score_old = new double[nnodes];
+     double *score_new = new double[nnodes];
+
+     // 初始化 score_old
+     #pragma omp parallel for
+     for(int i=0;i<nnodes;i++){
+        score_old[i] = solution[i];
+     }
+
      bool converged = false;
      while(!converged){
-        double *score_new = new double[nnodes];
-
-        // 計算新分數
-        // sum over all incoming edges
-        #pragma omp parallel for
-        for(int vi=0;vi<nnodes;vi++){
-          score_new[vi] = 0.0;  // 初始化
-          const Vertex* start = incoming_begin(g, vi);
-          const Vertex* end = incoming_end(g, vi);
-          for(const Vertex* neighbor = start; neighbor != end; neighbor++){
-            int vj = *neighbor;  // 解引用获取邻居节点编号
-            score_new[vi] += solution[vj] / outgoing_size(g, vj);
-          }
-        }
-
-        #pragma omp parallel for
-        for(int vi=0;vi<nnodes;vi++){
-            score_new[vi] = (damping * score_new[vi]) + (1.0 - damping) / nnodes;
-        }
-
-        // 處理 dead end (no outgoing)
-        double bias = 0.0;
-        #pragma omp parallel for reduction(+:bias)
+        // 先計算 no outgoing edges 的貢獻 (dead end)
+        double no_outgoing_contrib = 0.0;
+        #pragma omp parallel for reduction(+:no_outgoing_contrib)
         for(int vi=0;vi<nnodes;vi++){
           if(outgoing_size(g,vi)==0){
-            bias += damping*solution[vi] / nnodes;
+            no_outgoing_contrib += damping * score_old[vi] / nnodes;
           }
         }
-        // 將 bias 累加上去
-        #pragma omp parallel for
-        for(int vi=0;vi<nnodes;vi++){
-          score_new[vi] += bias;
-        }
 
-        // 計算 global_diff
+        // 合併多個步驟到一個平行區域，減少 parallel overhead
         double global_diff = 0.0;
         #pragma omp parallel for reduction(+:global_diff)
         for(int vi=0;vi<nnodes;vi++){
-          global_diff += fabs(score_new[vi]-solution[vi]);
+          // 計算新分數：sum over all incoming edges
+          double sum = 0.0;
+          const Vertex* start = incoming_begin(g, vi);
+          const Vertex* end = incoming_end(g, vi);
+          for(const Vertex* neighbor = start; neighbor != end; neighbor++){
+            int vj = *neighbor;
+            sum += score_old[vj] / outgoing_size(g, vj);
+          }
+
+          // 應用 damping factor 和 dead end 貢獻
+          score_new[vi] = (damping * sum) + (1.0 - damping) / nnodes + no_outgoing_contrib;
+
+          // 同時計算 diff
+          global_diff += fabs(score_new[vi] - score_old[vi]);
         }
 
         converged = (global_diff < convergence);
 
-        // update score
-        #pragma omp parallel for
-        for(int i=0;i<nnodes;i++){
-          solution[i] = score_new[i];
-        }
-
-        delete[] score_new;
+        // 交換指標而不是複製數據，避免額外的記憶體操作
+        double *temp = score_old;
+        score_old = score_new;
+        score_new = temp;
      }
+
+     // 將最終結果複製回 solution
+     #pragma omp parallel for
+     for(int i=0;i<nnodes;i++){
+        solution[i] = score_old[i];
+     }
+
+     delete[] score_old;
+     delete[] score_new;
 }
