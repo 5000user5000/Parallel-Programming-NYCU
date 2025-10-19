@@ -1,0 +1,62 @@
+name: HW3 Part1 Validation
+
+on:
+  push:
+    paths:
+      - 'HW3/part1/**'
+  pull_request:
+    paths:
+      - 'HW3/part1/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential gcc libomp-dev
+
+    - name: Build project
+      working-directory: HW3/part1
+      run: make clean && make
+
+    - name: Run CG grader
+      working-directory: HW3/part1
+      run: |
+        output=$(./cg_grader 2>&1)
+        echo "$output"
+
+        # Check if verification is successful
+        if echo "$output" | grep -q "VERIFICATION SUCCESSFUL"; then
+          echo "✅ CG verification passed"
+        else
+          echo "❌ CG verification failed"
+          exit 1
+        fi
+
+        # Check if total score is 20.000000 (full marks)
+        if echo "$output" | grep -q "total.*:.*20\.000000"; then
+          echo "✅ Full score achieved: 20.000000"
+        else
+          score=$(echo "$output" | grep "total" | awk '{print $3}')
+          echo "❌ Score not full marks: $score (expected 20.000000)"
+          exit 1
+        fi
+
+    - name: Run CG benchmark
+      working-directory: HW3/part1
+      run: |
+        output=$(./cg 2>&1)
+        echo "$output"
+
+        # Check if verification is successful
+        if echo "$output" | grep -q "VERIFICATION SUCCESSFUL"; then
+          echo "✅ CG benchmark verification passed"
+        else
+          echo "❌ CG benchmark verification failed"
+          exit 1
+        fi
