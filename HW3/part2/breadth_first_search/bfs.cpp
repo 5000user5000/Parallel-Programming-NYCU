@@ -38,7 +38,8 @@ void top_down_step(Graph g, VertexSet *frontier, VertexSet *new_frontier, int *d
     #pragma omp parallel
     {
         // Each thread maintains a local buffer for new vertices
-        int *local_vertices = new int[g->num_nodes];
+        const int LOCAL_BUFFER_SIZE = 1024;
+        int local_vertices[LOCAL_BUFFER_SIZE];
         int local_count = 0;
 
         #pragma omp for schedule(dynamic, 1024)
@@ -54,23 +55,41 @@ void top_down_step(Graph g, VertexSet *frontier, VertexSet *new_frontier, int *d
             {
                 int outgoing = g->outgoing_edges[neighbor];
 
-                if (__sync_bool_compare_and_swap(&distances[outgoing], NOT_VISITED_MARKER, distances[node] + 1))
+                // Avoid compare_and_swap if we know it will fail
+                if (distances[outgoing] == NOT_VISITED_MARKER)
                 {
-                    local_vertices[local_count++] = outgoing;
+                    if (__sync_bool_compare_and_swap(&distances[outgoing], NOT_VISITED_MARKER, distances[node] + 1))
+                    {
+                        local_vertices[local_count++] = outgoing;
+
+                        // Flush local buffer if full
+                        if (local_count == LOCAL_BUFFER_SIZE)
+                        {
+                            #pragma omp critical
+                            {
+                                for (int j = 0; j < local_count; j++)
+                                {
+                                    new_frontier->vertices[new_frontier->count++] = local_vertices[j];
+                                }
+                            }
+                            local_count = 0;
+                        }
+                    }
                 }
             }
         }
 
-        // Merge local buffers into global new_frontier
-        #pragma omp critical
+        // Merge remaining local buffers into global new_frontier
+        if (local_count > 0)
         {
-            for (int i = 0; i < local_count; i++)
+            #pragma omp critical
             {
-                new_frontier->vertices[new_frontier->count++] = local_vertices[i];
+                for (int i = 0; i < local_count; i++)
+                {
+                    new_frontier->vertices[new_frontier->count++] = local_vertices[i];
+                }
             }
         }
-
-        delete[] local_vertices;
     }
 }
 
