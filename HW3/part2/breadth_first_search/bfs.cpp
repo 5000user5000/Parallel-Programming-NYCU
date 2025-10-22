@@ -260,8 +260,92 @@ void bfs_bottom_up(Graph graph, solution *sol)
 
 void bfs_hybrid(Graph graph, solution *sol)
 {
-    // For PP students:
-    //
-    // You will need to implement the "hybrid" BFS here as
-    // described in the handout.
+    VertexSet list1;
+    VertexSet list2;
+    vertex_set_init(&list1, graph->num_nodes);
+    vertex_set_init(&list2, graph->num_nodes);
+
+    VertexSet *frontier = &list1;
+    VertexSet *new_frontier = &list2;
+
+    // initialize all nodes to NOT_VISITED
+    #pragma omp parallel for
+    for (int i = 0; i < graph->num_nodes; i++)
+        sol->distances[i] = NOT_VISITED_MARKER;
+
+    // setup frontier with the root node
+    frontier->vertices[frontier->count++] = ROOT_NODE_ID;
+    sol->distances[ROOT_NODE_ID] = 0;
+
+    int current_distance = 0;
+    int unvisited_nodes = graph->num_nodes - 1; // All nodes except root
+
+    while (frontier->count != 0)
+    {
+#ifdef VERBOSE
+        double start_time = CycleTimer::current_seconds();
+#endif
+
+        vertex_set_clear(new_frontier);
+
+        // Calculate the number of edges to explore in top-down approach
+        int num_edges_frontier = 0;
+        #pragma omp parallel for reduction(+:num_edges_frontier)
+        for (int i = 0; i < frontier->count; i++)
+        {
+            int node = frontier->vertices[i];
+            int start_edge = graph->outgoing_starts[node];
+            int end_edge = (node == graph->num_nodes - 1) ? graph->num_edges : graph->outgoing_starts[node + 1];
+            num_edges_frontier += (end_edge - start_edge);
+        }
+
+        // Heuristic: Use bottom-up when frontier is large relative to remaining nodes
+        // Bottom-up checks incoming edges of unvisited nodes
+        // Top-down checks outgoing edges of frontier nodes
+
+        // Switch to bottom-up when:
+        // The work ratio favors bottom-up:
+        // - Top-down work: num_edges_frontier (edges to explore from frontier)
+        // - Bottom-up work: unvisited_nodes (nodes to check)
+        // Use a threshold to account for overhead
+
+        // More aggressive switching: use bottom-up when frontier has significant coverage
+        // Typically frontier grows exponentially then shrinks, we want to catch the peak
+        bool use_bottom_up = (num_edges_frontier > unvisited_nodes * 14) ||
+                             (frontier->count > graph->num_nodes / 5 && unvisited_nodes < graph->num_nodes / 2);
+
+#ifdef VERBOSE
+        printf("frontier=%d, unvisited=%d, edges_frontier=%d, use_bu=%d\n",
+               frontier->count, unvisited_nodes, num_edges_frontier, use_bottom_up);
+#endif
+
+        if (use_bottom_up)
+        {
+            bottom_up_step(graph, frontier, new_frontier, sol->distances, current_distance);
+        }
+        else
+        {
+            top_down_step(graph, frontier, new_frontier, sol->distances);
+        }
+
+#ifdef VERBOSE
+        double end_time = CycleTimer::current_seconds();
+        printf("frontier=%-10d %.4f sec (%s)\n", frontier->count, end_time - start_time,
+               use_bottom_up ? "bottom-up" : "top-down");
+#endif
+
+        // Update unvisited nodes count
+        unvisited_nodes -= new_frontier->count;
+
+        // swap pointers
+        VertexSet *tmp = frontier;
+        frontier = new_frontier;
+        new_frontier = tmp;
+
+        current_distance++;
+    }
+
+    // free memory
+    vertex_set_destroy(&list1);
+    vertex_set_destroy(&list2);
 }
