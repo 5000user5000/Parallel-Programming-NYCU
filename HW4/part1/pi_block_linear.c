@@ -26,6 +26,10 @@ int main(int argc, char **argv)
     long long int count = 0;
     unsigned int seed = world_rank * SEED;
 
+    if(world_rank == world_size - 1) {
+        // Last process takes the remainder tosses
+        number_of_tosses += tosses % world_size;
+    }
     for (long long int toss = 0; toss < number_of_tosses; toss++)
     {
         double x = (double)rand_r(&seed) / RAND_MAX * 2.0 - 1.0;
