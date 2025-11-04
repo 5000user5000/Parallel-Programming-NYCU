@@ -48,10 +48,7 @@ int main(int argc, char **argv)
     {
         // TODO: MPI workers
         long long int count = compute_pi(tosses, world_rank, world_size);
-
-        MPI_Request request;
-        MPI_Isend(&count, 1, MPI_LONG_LONG, 0, 0, MPI_COMM_WORLD, &request);
-        MPI_Wait(&request, MPI_STATUS_IGNORE);
+        MPI_Send(&count, 1, MPI_LONG_LONG, 0, 0, MPI_COMM_WORLD);
     }
 
     if (world_rank == 0)
@@ -67,11 +64,10 @@ int main(int argc, char **argv)
         long long int count = compute_pi(tosses, world_rank, world_size);
 
         // Use MPI_Waitany to process data as soon as it arrives
+        MPI_Waitall(world_size - 1, requests, MPI_STATUSES_IGNORE);
         for (int i = 0; i < world_size - 1; i++)
         {
-            int index;
-            MPI_Waitany(world_size - 1, requests, &index, MPI_STATUS_IGNORE);
-            count += recv_counts[index];  // Process whichever arrives first
+            count += recv_counts[i];
         }
         free(requests);
         free(recv_counts);
