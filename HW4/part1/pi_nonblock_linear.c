@@ -39,21 +39,21 @@ int main(int argc, char **argv)
     int world_rank, world_size;
     // ---
 
-    // TODO: MPI init
+    // MPI init
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
 
     if (world_rank > 0)
     {
-        // TODO: MPI workers
+        // MPI workers
         long long int count = compute_pi(tosses, world_rank, world_size);
         MPI_Send(&count, 1, MPI_LONG_LONG, 0, 0, MPI_COMM_WORLD);
     }
 
     if (world_rank == 0)
     {
-        // TODO: PI result
+        // PI result
         MPI_Request* requests = (MPI_Request*)malloc((world_size - 1) * sizeof(MPI_Request));
         long long int* recv_counts = (long long int*)malloc((world_size - 1) * sizeof(long long int));
         for (int i = 1; i < world_size; i++)
@@ -63,7 +63,7 @@ int main(int argc, char **argv)
 
         long long int count = compute_pi(tosses, world_rank, world_size);
 
-        // Use MPI_Waitany to process data as soon as it arrives
+        // Use MPI_Waitall to wait for all non-blocking receives to complete
         MPI_Waitall(world_size - 1, requests, MPI_STATUSES_IGNORE);
         for (int i = 0; i < world_size - 1; i++)
         {

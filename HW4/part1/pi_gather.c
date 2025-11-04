@@ -40,11 +40,11 @@ int main(int argc, char **argv)
     int world_rank, world_size;
     // ---
 
-    // TODO: MPI init
+    // MPI init
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-    // TODO: use MPI_Gather
+    // use MPI_Gather
     long long int local_count = compute_pi(tosses, world_rank, world_size);
     long long int* all_counts = NULL;
     if (world_rank == 0) {
@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 
     if (world_rank == 0)
     {
-        // TODO: PI result
+        // PI result
         long long int total_count = 0;
         for (int i = 0; i < world_size; i++) {
             total_count += all_counts[i];

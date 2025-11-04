@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 
     MPI_Win win;
 
-    // TODO: MPI init
+    // MPI init
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 
     if (world_rank == 0)
     {
-        // TODO: handle PI result
+        // handle PI result
         pi_result = 4.0 * (double)total_count / (double)tosses;
 
         // --- DON'T TOUCH ---

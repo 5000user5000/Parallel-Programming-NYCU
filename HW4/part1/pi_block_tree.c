@@ -39,13 +39,13 @@ int main(int argc, char **argv)
     int world_rank, world_size;
     // ---
 
-    // TODO: MPI init
+    // MPI init
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
     long long int count = compute_pi(tosses, world_rank, world_size);
 
-    // TODO: binary tree redunction
+    // binary tree redunction
     int step = 1;
     while (step < world_size)
     {
@@ -71,8 +71,6 @@ int main(int argc, char **argv)
 
     if (world_rank == 0)
     {
-        // TODO: PI result
-
         // Calculate PI from total count
         pi_result = 4.0 * (double)count / (double)tosses;
 
