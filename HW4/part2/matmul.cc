@@ -29,22 +29,35 @@ void construct_matrices(
     g_local_rows = base_rows + (g_rank < extra_rows ? 1 : 0);
 
     // Allocate with alignment for better cache performance
-    if (posix_memalign((void**)a_mat_ptr, 64, g_local_rows * m * sizeof(int)) != 0 ||
-        posix_memalign((void**)b_mat_ptr, 64, m * l * sizeof(int)) != 0 ||
-        posix_memalign((void**)&g_local_out, 64, g_local_rows * l * sizeof(int)) != 0) {
-        // Fallback to regular allocation if alignment fails
-        *a_mat_ptr = new int[g_local_rows * m];
-        *b_mat_ptr = new int[m * l];
-        g_local_out = new int[g_local_rows * l];
+    // Initialize pointers to nullptr first
+    *a_mat_ptr = nullptr;
+    *b_mat_ptr = nullptr;
+    g_local_out = nullptr;
+
+    // Try aligned allocation for each buffer independently, fallback to malloc if failed
+    if (posix_memalign((void**)a_mat_ptr, 64, g_local_rows * m * sizeof(int)) != 0) {
+        *a_mat_ptr = (int*)malloc(g_local_rows * m * sizeof(int));
+    }
+    if (posix_memalign((void**)b_mat_ptr, 64, m * l * sizeof(int)) != 0) {
+        *b_mat_ptr = (int*)malloc(m * l * sizeof(int));
+    }
+    if (posix_memalign((void**)&g_local_out, 64, g_local_rows * l * sizeof(int)) != 0) {
+        g_local_out = (int*)malloc(g_local_rows * l * sizeof(int));
     }
 
     // Allocate packing buffers
-    int max_pack_a = 256 * m;  // Max BLOCK_I * m
-    int max_pack_b = m * 256;  // Max m * BLOCK_J
-    if (posix_memalign((void**)&g_packed_a, 64, max_pack_a * sizeof(int)) != 0 ||
-        posix_memalign((void**)&g_packed_b, 64, max_pack_b * sizeof(int)) != 0) {
-        g_packed_a = new int[max_pack_a];
-        g_packed_b = new int[max_pack_b];
+    size_t max_pack_a = 256 * m;  // Max BLOCK_I * m
+    size_t max_pack_b = m * 256;  // Max m * BLOCK_J
+
+    // Initialize to nullptr and try aligned allocation independently
+    g_packed_a = nullptr;
+    g_packed_b = nullptr;
+
+    if (posix_memalign((void**)&g_packed_a, 64, max_pack_a * sizeof(int)) != 0) {
+        g_packed_a = (int*)malloc(max_pack_a * sizeof(int));
+    }
+    if (posix_memalign((void**)&g_packed_b, 64, max_pack_b * sizeof(int)) != 0) {
+        g_packed_b = (int*)malloc(max_pack_b * sizeof(int));
     }
 
     if (g_rank == 0) {
