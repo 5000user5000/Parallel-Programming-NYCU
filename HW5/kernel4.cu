@@ -1,66 +1,62 @@
-#include <cmath>
 #include <cstring>
 #include <cuda.h>
-#include <stdio.h>
-#include <stdlib.h>
 
-#define BLOCK_SIZE 8
+#define TILE_WIDTH 8
 
-__device__ int mandel(float c_re, float c_im, int count)
-{
-    float z_re = c_re, z_im = c_im;
-    int i;
-
-    for (i = 0; i < count; ++i) {
-        if (z_re * z_re + z_im * z_im > 4.f)
-            break;
-
-        float new_re = z_re * z_re - z_im * z_im;
-        float new_im = 2.f * z_re * z_im;
-        z_re = c_re + new_re;
-        z_im = c_im + new_im;
+#define MANDEL_LOOP(N) \
+    for (iter = 0; iter < N; iter++) { \
+        zr2 = zr * zr, zi2 = zi * zi; \
+        if (zr2 + zi2 > 4.0f) { \
+            device_output[py * img_width + px] = iter; \
+            return; \
+        } \
+        zi = ci + (2.0f * zr * zi); \
+        zr = cr + (zr2 - zi2); \
     }
 
-    return i;
-}
+#define ITER_CASES X(100000) X(10000) X(1000) X(256)
 
-__global__ void mandelKernel(int *output, float x0, float y0, float dx, float dy, int maxIterations, bool view1)
+__global__ void mandel_kernel(float x_start, float y_start, float x_step, float y_step,
+                                    int *__restrict__ device_output, int img_width, int img_height,
+                                    int max_iter)
 {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (view1 && ((i > 790 && i < 1201 && j > 296 && j < 904) ||
-                  (i > 438 && i < 629 && j > 493 && j < 707) ||
-                  (i > 712 && i < 791 && j > 398 && j < 802))) {
-        int index = j * gridDim.x * blockDim.x + i;
-        output[index] = maxIterations;
-        return;
+    float cr = x_start + px * x_step;
+    float ci = y_start + py * y_step;
+    float zr = cr, zi = ci;
+    float zr2, zi2;
+    int iter;
+
+#define X(N) if (max_iter == N) { _Pragma("unroll") MANDEL_LOOP(N) } else
+    ITER_CASES
+#undef X
+    {
+        MANDEL_LOOP(max_iter)
     }
-
-    float x = x0 + i * dx;
-    float y = y0 + j * dy;
-    int index = j * gridDim.x * blockDim.x + i;
-    output[index] = mandel(x, y, maxIterations);
+    device_output[py * img_width + px] = max_iter;
 }
 
 void host_fe(float upperX, float upperY, float lowerX, float lowerY, int *img, int resX, int resY, int maxIterations)
 {
-    bool view1 = (lowerX == -2 && lowerY == -1);
-    float dx = (upperX - lowerX) / resX;
-    float dy = (upperY - lowerY) / resY;
+    float x_step = (upperX - lowerX) / resX;
+    float y_step = (upperY - lowerY) / resY;
 
-    int *h_img = new int[resX * resY];
-    int *cudaResult;
-    cudaMalloc((void **)&cudaResult, sizeof(int) * resX * resY);
+    int total_pixels = resX * resY;
+    int *host_output = new int[total_pixels];
+    int *device_output;
+    cudaMalloc(&device_output, total_pixels * sizeof(int));
 
-    dim3 dimGrid(resX / BLOCK_SIZE, resY / BLOCK_SIZE);
-    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    dim3 block_dim(TILE_WIDTH, TILE_WIDTH);
+    dim3 grid_dim(resX / TILE_WIDTH, resY / TILE_WIDTH);
 
-    mandelKernel<<<dimGrid, dimBlock>>>(cudaResult, lowerX, lowerY, dx, dy, maxIterations, view1);
+    mandel_kernel<<<grid_dim, block_dim>>>(lowerX, lowerY, x_step, y_step,
+                                                  device_output, resX, resY, maxIterations);
 
-    cudaMemcpy(h_img, cudaResult, sizeof(int) * resX * resY, cudaMemcpyDeviceToHost);
-    memcpy(img, h_img, sizeof(int) * resX * resY);
+    cudaMemcpy(host_output, device_output, total_pixels * sizeof(int), cudaMemcpyDeviceToHost);
+    memcpy(img, host_output, total_pixels * sizeof(int));
 
-    delete[] h_img;
-    cudaFree(cudaResult);
+    delete[] host_output;
+    cudaFree(device_output);
 }
