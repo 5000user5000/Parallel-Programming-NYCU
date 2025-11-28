@@ -66,11 +66,12 @@ void host_fe(int filter_width,
     status = clSetKernelArg(kernel, 6, sizeof(int), &filter_type);
     CHECK(status, "clSetKernelArg 6");
 
-    // Execute kernel with 32x8 work-group size
-    size_t local_work_size[2] = {32, 8};
+    // Execute kernel with 16x16 work-group size
+    // Each thread processes 2 pixels horizontally
+    size_t local_work_size[2] = {16, 16};
     size_t global_work_size[2] = {
-        ((image_width + 31) / 32) * 32,
-        ((image_height + 7) / 8) * 8
+        ((image_width + 1) / 2 + 15) / 16 * 16,  // Half width (2 pixels per thread)
+        ((image_height + 15) / 16) * 16
     };
 
     status = clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, global_work_size,
