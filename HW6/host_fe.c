@@ -21,27 +21,18 @@ void host_fe(int filter_width,
     cl_command_queue command_queue = clCreateCommandQueue(*context, *device, 0, &status);
     CHECK(status, "clCreateCommandQueue");
 
-    // Create memory buffers
-    cl_mem filter_buffer = clCreateBuffer(*context, CL_MEM_READ_ONLY,
-                                         filter_size * sizeof(float), NULL, &status);
+    // Create memory buffers with host pointers for faster transfer
+    cl_mem filter_buffer = clCreateBuffer(*context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         filter_size * sizeof(float), filter, &status);
     CHECK(status, "clCreateBuffer filter");
 
-    cl_mem input_buffer = clCreateBuffer(*context, CL_MEM_READ_ONLY,
-                                        image_size * sizeof(float), NULL, &status);
+    cl_mem input_buffer = clCreateBuffer(*context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                        image_size * sizeof(float), input_image, &status);
     CHECK(status, "clCreateBuffer input");
 
     cl_mem output_buffer = clCreateBuffer(*context, CL_MEM_WRITE_ONLY,
                                          image_size * sizeof(float), NULL, &status);
     CHECK(status, "clCreateBuffer output");
-
-    // Write data to device
-    status = clEnqueueWriteBuffer(command_queue, filter_buffer, CL_TRUE, 0,
-                                 filter_size * sizeof(float), filter, 0, NULL, NULL);
-    CHECK(status, "clEnqueueWriteBuffer filter");
-
-    status = clEnqueueWriteBuffer(command_queue, input_buffer, CL_TRUE, 0,
-                                 image_size * sizeof(float), input_image, 0, NULL, NULL);
-    CHECK(status, "clEnqueueWriteBuffer input");
 
     // Create kernel
     cl_kernel kernel = clCreateKernel(*program, "convolution", &status);
@@ -66,10 +57,15 @@ void host_fe(int filter_width,
     status = clSetKernelArg(kernel, 5, sizeof(cl_mem), &output_buffer);
     CHECK(status, "clSetKernelArg 5");
 
-    // Execute kernel
-    size_t global_work_size[2] = {image_width, image_height};
+    // Execute kernel with 32x8 work-group size
+    size_t local_work_size[2] = {32, 8};
+    size_t global_work_size[2] = {
+        ((image_width + 31) / 32) * 32,
+        ((image_height + 7) / 8) * 8
+    };
+
     status = clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, global_work_size,
-                                   NULL, 0, NULL, NULL);
+                                   local_work_size, 0, NULL, NULL);
     CHECK(status, "clEnqueueNDRangeKernel");
 
     // Read result back
