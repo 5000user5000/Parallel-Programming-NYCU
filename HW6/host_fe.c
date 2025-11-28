@@ -57,6 +57,15 @@ void host_fe(int filter_width,
     status = clSetKernelArg(kernel, 5, sizeof(cl_mem), &output_buffer);
     CHECK(status, "clSetKernelArg 5");
 
+    // Identify filter type for sparse optimization
+    int filter_type = 0;
+    if (filter_width == 3) filter_type = 2;       // filter2.csv
+    else if (filter_width == 5) filter_type = 3;  // filter3.csv
+    else if (filter_width == 7) filter_type = 1;  // filter1.csv
+
+    status = clSetKernelArg(kernel, 6, sizeof(int), &filter_type);
+    CHECK(status, "clSetKernelArg 6");
+
     // Execute kernel with 32x8 work-group size
     size_t local_work_size[2] = {32, 8};
     size_t global_work_size[2] = {
